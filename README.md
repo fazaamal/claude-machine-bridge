@@ -44,8 +44,8 @@ npx github:fazaamal/claude-machine-bridge status
 ```
 
 ```
-  OK  admins-mac-mini (this machine)  [loopback]        ask=true
-  OK  fazas-macbook-pro-m1-pro        [100.89.110.19]   ask=true
+  OK  desktop  (this machine)  [loopback]       ask=true
+  OK  laptop                    [100.x.y.z]      ask=true
 ```
 
 ## MCP tools
