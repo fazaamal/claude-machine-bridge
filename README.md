@@ -27,14 +27,15 @@ The first machine prints a **token**. Install on the others with the same one:
 npx github:fazaamal/claude-machine-bridge install --token <TOKEN>
 ```
 
-Then on each machine, expose the port to your tailnet and register the MCP server:
+Then register the MCP server with Claude Code:
 
 ```bash
-tailscale serve --bg --tcp 8791 tcp://127.0.0.1:8791
 claude mcp add-json claude-machine-bridge '{"command":"node","args":["<path>/src/cli.js","mcp"]}'
 ```
 
-`install` prints the exact `claude mcp add-json` line with the right paths.
+`install` prints the exact line with the right paths.
+
+No `tailscale serve` is required — see below.
 
 Check it worked:
 
@@ -66,7 +67,10 @@ npx github:fazaamal/claude-machine-bridge status
 
 The tailnet is a boundary, not the only one.
 
-- **Loopback only.** The daemon binds `127.0.0.1`. Tailscale Serve fronts it; nothing listens on your LAN.
+- **Loopback + tailnet only.** The daemon binds `127.0.0.1` and your Tailscale addresses
+  (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) — never `0.0.0.0`. Those ranges only route inside
+  the tailnet, so other machines reach it directly and nothing is exposed on your LAN or on
+  café wifi. Verified: the tailnet address answers while the LAN address refuses the connection.
 - **Shared token** on every request, compared in constant time. No token, wrong token → `401`.
 - **Path allowlist.** File reads/writes are confined to `allowedRoots` (default `~/Projects`
   and `~/Downloads/claude-inbox`). Everything else is refused, including `../` escapes.

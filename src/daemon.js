@@ -72,8 +72,33 @@ function runAsk(prompt, cwd) {
   });
 }
 
+/**
+ * Addresses to listen on: loopback always, plus any Tailscale address.
+ *
+ * Tailscale hands out 100.64.0.0/10 (CGNAT) and fd7a:115c:a1e0::/48, and those
+ * are only routable inside the tailnet — so binding them directly is reachable
+ * from your other machines without `tailscale serve` in front. Deliberately
+ * never 0.0.0.0, which would also expose the daemon on café wifi.
+ */
+function bindAddresses() {
+  const addrs = ["127.0.0.1"];
+  const ifaces = os.networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    for (const a of list || []) {
+      if (a.internal) continue;
+      if (a.family === "IPv4") {
+        const [x, y] = a.address.split(".").map(Number);
+        if (x === 100 && y >= 64 && y <= 127) addrs.push(a.address); // CGNAT
+      } else if (a.family === "IPv6" && a.address.toLowerCase().startsWith("fd7a:115c:a1e0")) {
+        addrs.push(a.address);
+      }
+    }
+  }
+  return [...new Set(addrs)];
+}
+
 export function startDaemon({ port = cfg.port } = {}) {
-  const server = http.createServer(async (req, res) => {
+  const handler = async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
     const p = url.pathname.replace(/\/+$/, "") || "/";
 
@@ -151,12 +176,23 @@ export function startDaemon({ port = cfg.port } = {}) {
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) });
     }
-  });
+  };
 
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`claude-machine-bridge daemon on http://127.0.0.1:${port}`);
-    console.log(`allowed roots: ${cfg.allowedRoots.join(", ")}`);
-    console.log(`ask enabled: ${!!cfg.allowAsk}`);
-  });
-  return server;
+  const servers = [];
+  for (const addr of bindAddresses()) {
+    const s = http.createServer(handler);
+    s.on("error", (e) => {
+      // A tailnet address can vanish (Tailscale restart); loopback must not.
+      if (addr === "127.0.0.1") throw e;
+      console.error(`could not bind ${addr}:${port} - ${e.message}`);
+    });
+    s.listen(port, addr, () => {
+      const shown = addr.includes(":") ? `[${addr}]` : addr;
+      console.log(`listening on http://${shown}:${port}`);
+    });
+    servers.push(s);
+  }
+  console.log(`allowed roots: ${cfg.allowedRoots.join(", ")}`);
+  console.log(`ask enabled: ${!!cfg.allowAsk}`);
+  return servers;
 }

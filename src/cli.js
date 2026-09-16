@@ -80,12 +80,13 @@ async function main() {
       console.log(`  roots       ${cfg.allowedRoots.join(", ")}`);
       console.log(`  ask         ${cfg.allowAsk ? "enabled" : "disabled"}`);
       console.log(`\n  TOKEN (same on every machine):\n\n    ${cfg.token}\n`);
+      console.log("The daemon binds loopback + your Tailscale address directly,");
+      console.log("so no `tailscale serve` is needed. It is not exposed on your LAN.\n");
       console.log("Next:");
-      console.log("  1. Expose to the tailnet:  tailscale serve --bg --tcp " + cfg.port + " tcp://127.0.0.1:" + cfg.port);
-      console.log("  2. Register the MCP server with Claude Code:\n");
+      console.log("  1. Register the MCP server with Claude Code:\n");
       console.log("     claude mcp add-json claude-machine-bridge '" +
         JSON.stringify(mcpSnippet(entry)["claude-machine-bridge"]) + "'\n");
-      console.log("  3. On your OTHER machine, run the same install with --token <TOKEN above>");
+      console.log("  2. On your OTHER machine, run the same install with --token <TOKEN above>");
       break;
     }
 
