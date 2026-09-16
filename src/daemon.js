@@ -178,10 +178,13 @@ export function startDaemon({ port = cfg.port } = {}) {
     }
   };
 
-  const servers = [];
-  for (const addr of bindAddresses()) {
+  const servers = new Map(); // addr -> server
+
+  const bind = (addr) => {
+    if (servers.has(addr)) return;
     const s = http.createServer(handler);
     s.on("error", (e) => {
+      servers.delete(addr);
       // A tailnet address can vanish (Tailscale restart); loopback must not.
       if (addr === "127.0.0.1") throw e;
       console.error(`could not bind ${addr}:${port} - ${e.message}`);
@@ -190,9 +193,26 @@ export function startDaemon({ port = cfg.port } = {}) {
       const shown = addr.includes(":") ? `[${addr}]` : addr;
       console.log(`listening on http://${shown}:${port}`);
     });
-    servers.push(s);
-  }
+    servers.set(addr, s);
+  };
+
+  bindAddresses().forEach(bind);
   console.log(`allowed roots: ${cfg.allowedRoots.join(", ")}`);
   console.log(`ask enabled: ${!!cfg.allowAsk}`);
+
+  // At login this daemon can start before Tailscale has brought its interface
+  // up, leaving it bound to loopback only and unreachable from other machines
+  // — with nothing crashing, so KeepAlive never rescues it. Keep watching for
+  // tailnet addresses and bind them when they appear.
+  const rescan = setInterval(() => {
+    for (const addr of bindAddresses()) {
+      if (!servers.has(addr)) {
+        console.log(`new address detected: ${addr}`);
+        bind(addr);
+      }
+    }
+  }, 30000);
+  if (rescan.unref) rescan.unref();
+
   return servers;
 }

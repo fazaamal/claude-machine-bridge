@@ -119,6 +119,68 @@ async function main() {
       break;
     }
 
+    case "doctor": {
+      const cfg = loadConfig();
+      const os2 = await import("node:os");
+      const { execFileSync } = await import("node:child_process");
+      const uid = process.getuid();
+      console.log("claude-machine-bridge doctor\n");
+
+      console.log(`config: ${CONFIG_PATH}`);
+      console.log(`token:  ${cfg.token ? cfg.token.slice(0, 8) + "… (" + cfg.token.length + " chars)" : "MISSING"}`);
+      console.log(`port:   ${cfg.port}\n`);
+
+      let running = false;
+      try {
+        const out = execFileSync("launchctl", ["print", `gui/${uid}/${LABEL}`], { encoding: "utf8" });
+        running = /state = running/.test(out);
+        const pid = (out.match(/pid = (\d+)/) || [])[1];
+        console.log(`launchd: ${running ? "running" : "NOT running"}${pid ? " (pid " + pid + ")" : ""}`);
+      } catch {
+        console.log("launchd: service not loaded  -> run `install`");
+      }
+
+      const tsAddrs = [];
+      for (const list of Object.values(os2.networkInterfaces())) {
+        for (const a of list || []) {
+          if (a.internal) continue;
+          if (a.family === "IPv4") {
+            const [x, y] = a.address.split(".").map(Number);
+            if (x === 100 && y >= 64 && y <= 127) tsAddrs.push(a.address);
+          }
+        }
+      }
+      console.log(`tailscale address: ${tsAddrs.length ? tsAddrs.join(", ") : "NONE (is Tailscale up?)"}`);
+
+      const check = async (host) => {
+        try {
+          const r = await fetch(`http://${host}:${cfg.port}/health`, { signal: AbortSignal.timeout(4000) });
+          return r.ok ? "OK" : `HTTP ${r.status}`;
+        } catch (e) {
+          return `unreachable (${String(e.message || e).slice(0, 40)})`;
+        }
+      };
+      console.log(`  loopback  127.0.0.1:${cfg.port}  -> ${await check("127.0.0.1")}`);
+      for (const a of tsAddrs) {
+        const res = await check(a);
+        console.log(`  tailnet   ${a}:${cfg.port}  -> ${res}`);
+        if (res !== "OK") {
+          console.log("\n  Bound to loopback only, or blocked. Try:");
+          console.log(`    launchctl kickstart -k gui/${uid}/${LABEL}`);
+          console.log("  If it still fails, macOS firewall may be blocking node:");
+          console.log("    System Settings > Network > Firewall > Options > allow incoming for node");
+        }
+      }
+      console.log("\nlog tail:");
+      try {
+        const log = fs.readFileSync(path.join(os.homedir(), ".config", "claude-machine-bridge", "daemon.log"), "utf8");
+        console.log(log.trim().split("\n").slice(-6).map((l) => "  " + l).join("\n"));
+      } catch {
+        console.log("  (no daemon.log yet)");
+      }
+      break;
+    }
+
     case "token": {
       const cfg = ensureConfig();
       if (rest[0] === "--rotate") {
@@ -149,6 +211,7 @@ async function main() {
   serve   [--port N]           run the daemon in the foreground
   mcp                          run the MCP server on stdio (Claude Code uses this)
   status                       show which machines are reachable
+  doctor                       diagnose why this machine is not reachable
   token   [--rotate]           print (or rotate) the shared token
   uninstall                    remove the launchd daemon
 
