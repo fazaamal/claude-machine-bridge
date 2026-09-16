@@ -1,0 +1,26 @@
+{
+  "name": "claude-machine-bridge",
+  "version": "0.1.0",
+  "description": "Reach your Claude Code sessions, context and files on another machine over Tailscale, from inside one chat.",
+  "type": "module",
+  "bin": {
+    "claude-machine-bridge": "src/cli.js",
+    "cmb": "src/cli.js"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0"
+  },
+  "scripts": {
+    "serve": "node src/cli.js serve",
+    "mcp": "node src/cli.js mcp"
+  },
+  "license": "MIT",
+  "private": false
+}
